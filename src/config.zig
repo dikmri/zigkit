@@ -79,7 +79,7 @@ fn initDefaults(comptime T: type, allocator: std.mem.Allocator) !T {
     var result: T = undefined;
     inline for (@typeInfo(T).@"struct".fields) |field| {
         if (field.default_value_ptr) |ptr| {
-            const typed: *const field.type = @alignCast(@ptrCast(ptr));
+            const typed: *const field.type = @ptrCast(@alignCast(ptr));
             const val = typed.*;
             // Deep-copy so we own all memory (strings, nested structs, etc.)
             @field(result, field.name) = try deepCopyValue(field.type, allocator, val);
