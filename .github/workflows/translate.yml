@@ -1,10 +1,14 @@
 name: Translate README
 
+# Manual trigger only — run this when ANTHROPIC_API_KEY is available.
+# Otherwise, maintain README.md (English) and README.ja.md (Japanese) by hand.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'README.ja.md'
+  workflow_dispatch:
+    inputs:
+      target_languages:
+        description: 'Languages to translate to (comma-separated: en,zh,ko)'
+        required: false
+        default: 'en,zh,ko'
 
 jobs:
   translate:
@@ -16,16 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Translate to English, Chinese, Korean
+      - name: Translate to selected languages
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           SOURCE=$(cat README.ja.md)
+          LANGS="${{ github.event.inputs.target_languages }}"
 
           translate() {
             local target_lang="$1"
             local out_file="$2"
 
+            echo "Translating to ${target_lang}..."
             RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
               -H "x-api-key: ${ANTHROPIC_API_KEY}" \
               -H "anthropic-version: 2023-06-01" \
@@ -43,21 +49,25 @@ jobs:
                   }]
                 }')")
 
-            # Validate response before writing
             TRANSLATED=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
             if [ -z "$TRANSLATED" ] || [ "$TRANSLATED" = "null" ]; then
-              echo "WARNING: Translation to ${target_lang} failed or returned empty. Skipping ${out_file}."
+              echo "ERROR: Translation to ${target_lang} failed. Skipping."
               echo "Response: $RESPONSE"
               return 1
             fi
 
             echo "$TRANSLATED" > "$out_file"
-            echo "Translated to ${target_lang}: ${out_file}"
+            echo "Done: ${out_file}"
           }
 
-          translate "English" "README.md" || true
-          translate "Simplified Chinese" "README.zh.md" || true
-          translate "Korean" "README.ko.md" || true
+          echo "$LANGS" | tr ',' '\n' | while read lang; do
+            case "$lang" in
+              en)  translate "English"            "README.md"    || true ;;
+              zh)  translate "Simplified Chinese" "README.zh.md" || true ;;
+              ko)  translate "Korean"             "README.ko.md" || true ;;
+              *)   echo "Unknown language: $lang" ;;
+            esac
+          done
 
       - name: Commit translated files
         run: |
@@ -67,6 +77,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: auto-translate README from Japanese [skip ci]"
+            git commit -m "chore: translate README via workflow_dispatch [skip ci]"
             git push
           fi

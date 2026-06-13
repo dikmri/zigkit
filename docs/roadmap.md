@@ -8,7 +8,8 @@
 - [x] `zigkit-test` — テストヘルパー（TempDir、snapshot、JSON比較）
 - [x] GitHub Actions CI（Linux/macOS/Windows）
 - [x] GitHub Actions リリース自動化
-- [x] README 多言語自動翻訳（EN/ZH/KO）
+- [x] README 二言語対応（日本語 / 英語）
+- [x] 手動トリガーによる多言語翻訳ワークフロー（ZH/KO、`ANTHROPIC_API_KEY` シークレットが必要）
 
 ## v0.2.0（予定）
 
