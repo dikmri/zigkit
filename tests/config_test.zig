@@ -153,23 +153,29 @@ test "JSON: 部分的なフィールドでデフォルトが補完される" {
 // Platform-specific env var manipulation (needed for testing env prefix logic).
 // On Windows, std.c.getenv reads from MSVCRT's env cache, so we must use
 // _putenv_s (via "c" linkage) to update it — SetEnvironmentVariableA alone is not enough.
-const crt_putenv_s = if (builtin.os.tag == .windows) struct {
-    extern "c" fn _putenv_s(name: [*:0]const u8, value: [*:0]const u8) c_int;
-} else struct {};
+const platform_env = switch (builtin.os.tag) {
+    .windows => struct {
+        extern "c" fn _putenv_s(name: [*:0]const u8, value: [*:0]const u8) c_int;
+    },
+    else => struct {
+        extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
+        extern "c" fn unsetenv(name: [*:0]const u8) c_int;
+    },
+};
 
 fn setEnvVar(name: [*:0]const u8, value: [*:0]const u8) void {
     if (comptime builtin.os.tag == .windows) {
-        _ = crt_putenv_s._putenv_s(name, value);
+        _ = platform_env._putenv_s(name, value);
     } else {
-        _ = std.c.setenv(name, value, 1);
+        _ = platform_env.setenv(name, value, 1);
     }
 }
 
 fn unsetEnvVar(name: [*:0]const u8) void {
     if (comptime builtin.os.tag == .windows) {
-        _ = crt_putenv_s._putenv_s(name, "");
+        _ = platform_env._putenv_s(name, "");
     } else {
-        _ = std.c.unsetenv(name);
+        _ = platform_env.unsetenv(name);
     }
 }
 
