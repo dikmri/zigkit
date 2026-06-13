@@ -23,9 +23,8 @@ jobs:
           SOURCE=$(cat README.ja.md)
 
           translate() {
-            local lang="$1"
-            local target_lang="$2"
-            local out_file="$3"
+            local target_lang="$1"
+            local out_file="$2"
 
             RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
               -H "x-api-key: ${ANTHROPIC_API_KEY}" \
@@ -43,13 +42,22 @@ jobs:
                     content: ("Translate the following Japanese Markdown README to " + $lang + ". Preserve all code blocks, links, badges, and markdown formatting exactly. Only translate the prose text. Output only the translated Markdown without any preamble.\n\n" + $source)
                   }]
                 }')")
-            echo "$RESPONSE" | jq -r '.content[0].text' > "$out_file"
-            echo "Translated to ${lang}: ${out_file}"
+
+            # Validate response before writing
+            TRANSLATED=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+            if [ -z "$TRANSLATED" ] || [ "$TRANSLATED" = "null" ]; then
+              echo "WARNING: Translation to ${target_lang} failed or returned empty. Skipping ${out_file}."
+              echo "Response: $RESPONSE"
+              return 1
+            fi
+
+            echo "$TRANSLATED" > "$out_file"
+            echo "Translated to ${target_lang}: ${out_file}"
           }
 
-          translate "English" "English" "README.md"
-          translate "Simplified Chinese" "Simplified Chinese" "README.zh.md"
-          translate "Korean" "Korean" "README.ko.md"
+          translate "English" "README.md" || true
+          translate "Simplified Chinese" "README.zh.md" || true
+          translate "Korean" "README.ko.md" || true
 
       - name: Commit translated files
         run: |
