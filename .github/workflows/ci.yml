@@ -18,34 +18,52 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            zig_arch: linux-x86_64
+            zig_platform: x86_64-linux
             zig_ext: tar.xz
           - os: macos-latest
-            zig_arch: macos-aarch64
+            zig_platform: aarch64-macos
             zig_ext: tar.xz
           - os: windows-latest
-            zig_arch: windows-x86_64
+            zig_platform: x86_64-windows
             zig_ext: zip
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Zig ${{ env.ZIG_VERSION }} (Unix)
+      - name: Install Zig (Unix)
         if: runner.os != 'Windows'
+        env:
+          PLATFORM: ${{ matrix.zig_platform }}
+          EXT: ${{ matrix.zig_ext }}
         run: |
-          URL="https://ziglang.org/download/${ZIG_VERSION}/zig-${{ matrix.zig_arch }}-${ZIG_VERSION}.${{ matrix.zig_ext }}"
-          curl -fsSL "$URL" -o zig.tar.xz
-          tar xf zig.tar.xz
-          echo "$PWD/zig-${{ matrix.zig_arch }}-${ZIG_VERSION}" >> $GITHUB_PATH
+          TARBALL=$(curl -fsSL https://ziglang.org/download/index.json | jq -r --arg v "$ZIG_VERSION" --arg p "$PLATFORM" '.[$v][$p].tarball // ""')
+          if [ -z "$TARBALL" ]; then
+            TARBALL="https://ziglang.org/download/${ZIG_VERSION}/zig-${PLATFORM}-${ZIG_VERSION}.${EXT}"
+          fi
+          echo "Downloading: $TARBALL"
+          curl -fsSL "$TARBALL" -o zig.archive
+          tar xf zig.archive
+          ZIG_DIR=$(ls -d zig-${PLATFORM}-* | head -1)
+          echo "$PWD/$ZIG_DIR" >> $GITHUB_PATH
 
-      - name: Install Zig ${{ env.ZIG_VERSION }} (Windows)
+      - name: Install Zig (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.zig_platform }}
+          EXT: ${{ matrix.zig_ext }}
         run: |
-          $url = "https://ziglang.org/download/$env:ZIG_VERSION/zig-${{ matrix.zig_arch }}-$env:ZIG_VERSION.${{ matrix.zig_ext }}"
-          Invoke-WebRequest -Uri $url -OutFile zig.zip
+          $version = $env:ZIG_VERSION
+          $platform = $env:PLATFORM
+          $ext = $env:EXT
+          $index = Invoke-RestMethod -Uri "https://ziglang.org/download/index.json"
+          $tarball = $index.$version.$platform.tarball
+          if (-not $tarball) { $tarball = "https://ziglang.org/download/$version/zig-$platform-$version.$ext" }
+          Write-Host "Downloading: $tarball"
+          Invoke-WebRequest -Uri $tarball -OutFile zig.zip
           Expand-Archive zig.zip -DestinationPath .
-          echo "$PWD\zig-${{ matrix.zig_arch }}-$env:ZIG_VERSION" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $zigDir = (Get-ChildItem -Directory "zig-$platform-*" | Select-Object -First 1).FullName
+          echo $zigDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify Zig version
         run: zig version
