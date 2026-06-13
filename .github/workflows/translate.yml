@@ -1,0 +1,64 @@
+name: Translate README
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.ja.md'
+
+jobs:
+  translate:
+    name: Translate README.ja.md
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Translate to English, Chinese, Korean
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          SOURCE=$(cat README.ja.md)
+
+          translate() {
+            local lang="$1"
+            local target_lang="$2"
+            local out_file="$3"
+
+            RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "content-type: application/json" \
+              -d "$(jq -n \
+                --arg model "claude-haiku-4-5-20251001" \
+                --arg source "$SOURCE" \
+                --arg lang "$target_lang" \
+                '{
+                  model: $model,
+                  max_tokens: 4096,
+                  messages: [{
+                    role: "user",
+                    content: ("Translate the following Japanese Markdown README to " + $lang + ". Preserve all code blocks, links, badges, and markdown formatting exactly. Only translate the prose text. Output only the translated Markdown without any preamble.\n\n" + $source)
+                  }]
+                }')")
+            echo "$RESPONSE" | jq -r '.content[0].text' > "$out_file"
+            echo "Translated to ${lang}: ${out_file}"
+          }
+
+          translate "English" "English" "README.md"
+          translate "Simplified Chinese" "Simplified Chinese" "README.zh.md"
+          translate "Korean" "Korean" "README.ko.md"
+
+      - name: Commit translated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md README.zh.md README.ko.md
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: auto-translate README from Japanese [skip ci]"
+            git push
+          fi

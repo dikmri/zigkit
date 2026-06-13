@@ -1,0 +1,14 @@
+.{
+    .name = .zigkit,
+    .fingerprint = 0x8e7d1488ac2a064f,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "LICENSE",
+    },
+}
