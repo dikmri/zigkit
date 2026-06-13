@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  ZIG_VERSION: "0.16.0"
+
 jobs:
   release:
     name: Create Release
@@ -16,28 +19,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Zig 0.16.0
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.16.0
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        run: |
+          URL="https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          curl -fsSL "$URL" -o zig.tar.xz
+          tar xf zig.tar.xz
+          echo "$PWD/zig-linux-x86_64-${ZIG_VERSION}" >> $GITHUB_PATH
+
+      - name: Verify Zig version
+        run: zig version
 
       - name: Run tests
         run: zig build test --summary all
 
       - name: Create tarball
+        id: pkg
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           ARCHIVE="zigkit-${TAG}.tar.gz"
           git archive --format=tar.gz --prefix="zigkit-${TAG}/" HEAD > "${ARCHIVE}"
-          echo "ARCHIVE=${ARCHIVE}" >> $GITHUB_ENV
-          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
       - name: Extract release notes
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
+          TAG=${{ steps.pkg.outputs.tag }}
+          VERSION="${TAG#v}"
           if [ -f "CHANGELOG.md" ]; then
-            # Extract section for this tag
-            awk "/^## \[${TAG}\]/{found=1; next} /^## \[/{found=0} found{print}" CHANGELOG.md > release_notes.md
+            awk "/^## \[${TAG}\]|^## \[v${VERSION}\]/{found=1; next} /^## \[/{found=0} found{print}" CHANGELOG.md > release_notes.md
+            if [ ! -s release_notes.md ]; then
+              echo "Release ${TAG}" > release_notes.md
+            fi
           else
             echo "Release ${TAG}" > release_notes.md
           fi
@@ -46,6 +58,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release_notes.md
-          files: ${{ env.ARCHIVE }}
-          tag_name: ${{ env.TAG }}
-          name: ${{ env.TAG }}
+          files: ${{ steps.pkg.outputs.archive }}
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: ${{ steps.pkg.outputs.tag }}

@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  ZIG_VERSION: "0.16.0"
+
 jobs:
   test:
     name: Test (${{ matrix.os }})
@@ -13,15 +16,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            zig_arch: linux-x86_64
+            zig_ext: tar.xz
+          - os: macos-latest
+            zig_arch: macos-aarch64
+            zig_ext: tar.xz
+          - os: windows-latest
+            zig_arch: windows-x86_64
+            zig_ext: zip
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Zig 0.16.0
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.16.0
+      - name: Install Zig ${{ env.ZIG_VERSION }} (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          URL="https://ziglang.org/download/${ZIG_VERSION}/zig-${{ matrix.zig_arch }}-${ZIG_VERSION}.${{ matrix.zig_ext }}"
+          curl -fsSL "$URL" -o zig.tar.xz
+          tar xf zig.tar.xz
+          echo "$PWD/zig-${{ matrix.zig_arch }}-${ZIG_VERSION}" >> $GITHUB_PATH
+
+      - name: Install Zig ${{ env.ZIG_VERSION }} (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://ziglang.org/download/$env:ZIG_VERSION/zig-${{ matrix.zig_arch }}-$env:ZIG_VERSION.${{ matrix.zig_ext }}"
+          Invoke-WebRequest -Uri $url -OutFile zig.zip
+          Expand-Archive zig.zip -DestinationPath .
+          echo "$PWD\zig-${{ matrix.zig_arch }}-$env:ZIG_VERSION" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify Zig version
+        run: zig version
 
       - name: Check formatting
         run: zig fmt --check src/ tests/ examples/
